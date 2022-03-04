@@ -9,6 +9,8 @@
 #include "asservissement.h"
 #include "debug_serial.h"
 
+#define PIN_LED1      (41)
+#define PIN_LED2      (40)
 #define PIN_LED3      (0)
 #define PIN_SPWM1     (5)
 #define PIN_SPWM2     (6)
@@ -56,7 +58,15 @@ public:
     CStrategie          m_strategie;
     CDebugSerial        m_debug_serial;
 
-    void step_simu_codeur_quadenc(long nbre_steps);    
+    void step_simu_codeur_quadenc(long nbre_steps); 
+    void read_internal_configuration(); 
+
+    void read_raw_hid();  
+    void write_raw_hid();
+    unsigned char m_rawhid_buffer[64];
+    unsigned int m_hid_packetCount;
+
+    unsigned int m_switch_clock_count;
 };
 
 extern CApplication application;

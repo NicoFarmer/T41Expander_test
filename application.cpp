@@ -2,6 +2,7 @@
 #include "application.h"
 #include <Servo.h>
 #include <Wire.h>
+#include "TeensyID.h"
 #include "InternalTemperature.h"
 #include "EEPROM.h"
 
@@ -26,6 +27,8 @@ void flash()
 void CApplication::init(void)
 {
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(PIN_LED1, OUTPUT);
+  pinMode(PIN_LED2, OUTPUT);
   pinMode(PIN_LED3, OUTPUT);
 
   
@@ -71,6 +74,9 @@ void CApplication::init(void)
   EEPROM.update(2, 0x96);
   EEPROM.update(3, 0x5A);
 */  
+
+  m_hid_packetCount = 0;
+  m_switch_clock_count = 0;
 }
 
 
@@ -87,6 +93,8 @@ void CApplication::run(void)
     char incomingByte = Serial.read();
     m_debug_serial.analyze(incomingByte);
   }
+
+  read_raw_hid();
 }
 
 //___________________________________________________________________________
@@ -106,7 +114,10 @@ void CApplication::Sequenceur(void)
   static unsigned int cpt200msec = 0;
   static unsigned int cpt500msec = 0;
   static unsigned int cpt1sec = 0;
-  static bool toggle = false;
+  static bool led1= false;
+  static bool led2 = false;
+  static bool led3 = false;
+  static bool led_in = false;
   static bool high_speed_frequency = false;
 
   // ______________________________
@@ -137,9 +148,8 @@ void CApplication::Sequenceur(void)
   if (cpt50msec >= TEMPO_50msec) {
     cpt50msec = 0;
 
-    digitalWrite(LED_BUILTIN, toggle);
-    digitalWrite(PIN_LED3, toggle);
-    toggle = ! toggle;
+    digitalWrite(LED_BUILTIN, led_in);
+    led_in = ! led_in;
 }
 
   // ______________________________
@@ -163,13 +173,18 @@ void CApplication::Sequenceur(void)
   cpt200msec++;
   if (cpt200msec >= TEMPO_200msec) {
     cpt200msec = 0;
+    digitalWrite(PIN_LED3, led3);
+    led3 = ! led3;
  }
   // ______________________________
   cpt500msec++;
   if (cpt500msec >= TEMPO_500msec) {
     cpt500msec = 0;
     Serial.printf("CodeurG=%ld / CodeurD=%ld / Codeur3=%ld /Codeur4=%ld\n\r", m_codeurs.read_CodeurGauche(), m_codeurs.read_CodeurDroit(), m_codeurs.read_Codeur3(), m_codeurs.read_Codeur4());
-    
+
+    digitalWrite(PIN_LED2, led2);
+    led2 = ! led2;
+
   }
   // ______________________________
   cpt1sec++;
@@ -182,17 +197,19 @@ void CApplication::Sequenceur(void)
   // Ajustement de la fréquence d'horloge en fonction de la température CPU
   if (high_speed_frequency)
   {
-    if (InternalTemperature.readTemperatureC() > 47) { 
+    if (InternalTemperature.readTemperatureC() > 55) { 
       set_arm_clock(150*1000000);
       high_speed_frequency = false;
+      m_switch_clock_count++;
       Serial.printf("Go to Low Speed CPU Frequency\n\r");
     }
   }
   else
   {
-    if (InternalTemperature.readTemperatureC() < 37) {
+    if (InternalTemperature.readTemperatureC() < 42) {
       set_arm_clock(600*1000000);
       high_speed_frequency = true;
+      m_switch_clock_count++;
       Serial.printf("Go to High Speed CPU Frequency\n\r");
     }
   }
@@ -205,6 +222,14 @@ void CApplication::Sequenceur(void)
   Wire.write(0x12);  // address low byte
   Wire.endTransmission();
 
+  digitalWrite(PIN_LED1, high_speed_frequency==true);
+  //led1 = ! led1;
+  
+  write_raw_hid();
+
+  read_internal_configuration();
+
+  
   }
 
 }
@@ -278,5 +303,94 @@ void CApplication::step_simu_codeur_quadenc(long nbre_steps)
    } // for i
 
 }
+
+
+void CApplication::write_raw_hid()
+{
+    // first 2 bytes are a signature
+    long coder= m_codeurs.read_CodeurGauche();
+    m_rawhid_buffer[0] = (coder>>24)&0xFF;
+    m_rawhid_buffer[1] = (coder>>16)&0xFF;
+    m_rawhid_buffer[2] = (coder>>8)&0xFF;
+    m_rawhid_buffer[3] = coder&0xFF;
+
+    coder= m_codeurs.read_CodeurDroit();
+    m_rawhid_buffer[5] = (coder>>24)&0xFF;
+    m_rawhid_buffer[6] = (coder>>16)&0xFF;
+    m_rawhid_buffer[7] = (coder>>8)&0xFF;
+    m_rawhid_buffer[8] = coder&0xFF;
+
+    coder= m_codeurs.read_Codeur3();
+    m_rawhid_buffer[10] = (coder>>24)&0xFF;
+    m_rawhid_buffer[11] = (coder>>16)&0xFF;
+    m_rawhid_buffer[12] = (coder>>8)&0xFF;
+    m_rawhid_buffer[13] = coder&0xFF;
+    
+    coder= m_codeurs.read_Codeur4();
+    m_rawhid_buffer[16] = (coder>>24)&0xFF;
+    m_rawhid_buffer[17] = (coder>>16)&0xFF;
+    m_rawhid_buffer[18] = (coder>>8)&0xFF;
+    m_rawhid_buffer[19] = coder&0xFF;
+ 
+
+    m_rawhid_buffer[25] = highByte(m_switch_clock_count);
+    m_rawhid_buffer[26] = lowByte(m_switch_clock_count);
+
+    
+    // fill the rest with zeros
+    for (int i=27; i<62; i++) {
+      m_rawhid_buffer[i] = 0;
+    }
+    // and put a count of packets sent at the end
+    m_rawhid_buffer[62] = highByte(m_hid_packetCount);
+    m_rawhid_buffer[63] = lowByte(m_hid_packetCount);
+    // actually send the packet
+    int n = RawHID.send(m_rawhid_buffer, 100);
+    if (n > 0) {
+      Serial.print(F("Transmit rawhid packet "));
+      Serial.println(m_hid_packetCount);
+      m_hid_packetCount = m_hid_packetCount + 1;
+    } else {
+      Serial.println(F("Unable to transmit rawhid packet"));
+    }
+}
+
+
+
+void CApplication::read_raw_hid()
+{
+  int n;
+  n = RawHID.recv(m_rawhid_buffer, 0); // 0 timeout = do not wait
+  if (n > 0) {
+    // the computer sent a message.  Display the bits
+    // of the first byte on pin 0 to 7.  Ignore the
+    // other 63 bytes!
+    Serial.print(F("Received packet, first byte: "));
+    Serial.println((int)m_rawhid_buffer[0]);
+  }
+}
+
+void CApplication::read_internal_configuration()
+{
+  uint8_t serial[4];
+  uint8_t mac[6];
+  uint32_t uid[4];
+  uint8_t uuid[16];
+
+  teensySN(serial);
+  teensyMAC(mac);
+  kinetisUID(uid);
+  teensyUUID(uuid);
+  Serial.printf("USB Serialnumber: %u \n", teensyUsbSN());
+  Serial.printf("Array Serialnumber: %02X-%02X-%02X-%02X \n", serial[0], serial[1], serial[2], serial[3]);
+  Serial.printf("String Serialnumber: %s\n", teensySN());
+  Serial.printf("Array MAC Address: %02X:%02X:%02X:%02X:%02X:%02X \n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  Serial.printf("String MAC Address: %s\n", teensyMAC());
+  Serial.printf("Array 128-bit UniqueID from chip: %08X-%08X-%08X-%08X\n", uid[0], uid[1], uid[2], uid[3]);
+  Serial.printf("String 128-bit UniqueID from chip: %s\n", kinetisUID());
+  Serial.printf("Array 128-bit UUID RFC4122: %02X%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X%02X%02X\n", uuid[0], uuid[1], uuid[2], uuid[3], uuid[4], uuid[5], uuid[6], uuid[7], uuid[8], uuid[9], uuid[10], uuid[11], uuid[12], uuid[13], uuid[14], uuid[15]);
+  Serial.printf("String 128-bit UUID RFC4122: %s\n", teensyUUID());
+}
+
 
 

@@ -147,9 +147,6 @@ void CApplication::Sequenceur(void)
   cpt50msec++;
   if (cpt50msec >= TEMPO_50msec) {
     cpt50msec = 0;
-
-    digitalWrite(LED_BUILTIN, led_in);
-    led_in = ! led_in;
 }
 
   // ______________________________
@@ -184,6 +181,9 @@ void CApplication::Sequenceur(void)
 
     digitalWrite(PIN_LED2, led2);
     led2 = ! led2;
+
+    digitalWrite(LED_BUILTIN, led_in);
+    led_in = ! led_in;
 
   }
   // ______________________________

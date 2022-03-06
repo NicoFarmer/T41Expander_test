@@ -1,0 +1,3 @@
+[submodule "ext/teensylib"]
+	path = ext/teensylib
+	url = https://github.com/NicoFarmer/teensylib

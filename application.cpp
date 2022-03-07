@@ -5,12 +5,14 @@
 #include "TeensyID.h"
 #include "InternalTemperature.h"
 #include "EEPROM.h"
+#include "FreqCount.h"
 
 extern "C" uint32_t set_arm_clock(uint32_t frequency); // required prototype
 
 Servo servo1;
 Servo servo2;
 Servo servo3;
+
 
 CApplication::CApplication()
 {

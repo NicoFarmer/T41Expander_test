@@ -133,6 +133,7 @@ CPUOPTIONS = -mcpu=cortex-m7 -mfloat-abi=hard -mfpu=fpv5-d16 -mthumb
 # locations and edit the pathnames.  The rest of Arduino is not needed.
 #************************************************************************
 COMPILERPATH = /opt/arduino-1.8.15/hardware/tools/arm/bin
+TOOLSPATH = /opt/arduino-1.8.15/hardware/tools
 
 
 #************************************************************************
@@ -274,16 +275,19 @@ OBJS := $(C_FILES:.c=.o) $(CPP_FILES:.cpp=.o)
 
 all: $(TARGET).hex
 
+install: $(TARGET).hex
+ifneq (,$(wildcard $(TOOLSPATH)))
+	$(TOOLSPATH)/teensy_post_compile -file=$(TARGET) -path=$(shell pwd) -tools=$(TOOLSPATH)
+	-$(TOOLSPATH)/teensy_reboot
+endif
+
 $(TARGET).elf: $(OBJS) $(TEENSY_DRV_PATH)/$(MCU_LD)
 	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(LIBS) 
 
 %.hex: %.elf
 	$(SIZE) $<
 	$(OBJCOPY) -O ihex -R .eeprom $< $@
-ifneq (,$(wildcard $(TOOLSPATH)))
-	$(TOOLSPATH)/teensy_post_compile -file=$(basename $@) -path=$(shell pwd) -tools=$(TOOLSPATH)
-	-$(TOOLSPATH)/teensy_reboot
-endif
+
 
 # compiler generated dependency info
 -include $(OBJS:.o=.d)

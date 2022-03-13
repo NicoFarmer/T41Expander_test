@@ -132,7 +132,7 @@ CPUOPTIONS = -mcpu=cortex-m7 -mfloat-abi=hard -mfpu=fpv5-d16 -mthumb
 # To use this makefile without Arduino, copy the resources from these
 # locations and edit the pathnames.  The rest of Arduino is not needed.
 #************************************************************************
-COMPILERPATH = /home/crlg/.platformio/packages/toolchain-gccarmnoneeabi@1.50401.190816/bin
+COMPILERPATH = /opt/arduino-1.8.15/hardware/tools/arm/bin
 
 
 #************************************************************************
